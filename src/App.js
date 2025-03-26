@@ -15,7 +15,7 @@ const theme = createTheme({
       main: '#556cd6',
     },
     secondary: {
-      main: '#ffad33', // A vibrant color for user messages
+      main: '#ffa34d', // Orange color for user messages
     },
     text: {
       primary: '#2e2e2e',
@@ -23,7 +23,7 @@ const theme = createTheme({
     },
   },
   shape: {
-    borderRadius: 15, // Applies globally to components like Paper, Button, etc.
+    borderRadius: 15,
   },
   shadows: ['none', '0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14), 0px 1px 10px 0px rgba(0,0,0,0.12)'],
 });
@@ -34,39 +34,43 @@ const ChatContainer = styled(Container)(({ theme }) => ({
   flexDirection: 'column',
   justifyContent: 'space-between',
   padding: '2rem',
-  backgroundColor: theme.palette.background.default, // Using the gradient here
+  backgroundColor: theme.palette.background.default,
 }));
 
-const ChatBubble = styled(Paper)(({ theme }) => ({
-  maxWidth: '80%',
+const MessageContainer = styled(Paper)(({ theme }) => ({
+  maxWidth: '100%',
   padding: '12px 18px',
   marginBottom: '12px',
-  borderRadius: '20px',
+  backgroundColor: theme.palette.common.white,
+}));
+
+const UserBubble = styled(MessageContainer)(({ theme }) => ({
+  backgroundColor: theme.palette.secondary.main, // Orange background for user messages
+}));
+
+const BotBubble = styled(MessageContainer)(({ theme }) => ({
+  backgroundColor: theme.palette.common.white,
+}));
+
+const MessageLabel = styled(Typography)(({ theme, type }) => ({
+  fontWeight: 'bold',
+  color: type === 'user' ? theme.palette.getContrastText(theme.palette.secondary.main) : theme.palette.primary.main,
+  marginBottom: '4px',
+}));
+
+const MessageText = styled(Typography)({
   wordWrap: 'break-word',
-  display: 'flex',
-  alignItems: 'center',
-  backgroundColor: theme.palette.common.white,
-  boxShadow: theme.shadows[1],
-}));
-
-const UserBubble = styled(ChatBubble)(({ theme }) => ({
-  backgroundColor: theme.palette.secondary.main,
-  color: theme.palette.getContrastText(theme.palette.secondary.main),
-  alignSelf: 'flex-end',
-  marginRight: '1rem',
-}));
-
-const BotBubble = styled(ChatBubble)(({ theme }) => ({
-  backgroundColor: theme.palette.common.white,
-  alignSelf: 'flex-start',
-  marginLeft: '1rem',
-}));
-
-const StyledAvatar = styled(Avatar)({
-  width: '30px',
-  height: '30px',
-  marginRight: '0.5rem',
 });
+
+function makeTextClickable(text) {
+  const urlRegex = /(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
+  return text.split(urlRegex).map((part, index) => {
+    if (part.match(urlRegex)) {
+      return <a key={index} href={part} target="_blank" rel="noopener noreferrer">{part}</a>;
+    }
+    return part;
+  });
+}
 
 function SearchComponent() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -76,7 +80,7 @@ function SearchComponent() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const handleSearch = async () => {
-    setChat((prevChat) => [...prevChat, { type: 'user', text: searchQuery }]);
+    setChat((prevChat) => [...prevChat, { type: 'user', text: [searchQuery] }]);
     setIsLoading(true);
   
     try {
@@ -88,24 +92,22 @@ function SearchComponent() {
         body: JSON.stringify({ search_query: searchQuery }),
       });
   
-      console.log('Status Code:', response.status); // Log status code
-  
       if (!response.ok) {
         throw new Error('Response not OK');
       }
   
-      // Assuming the server response is HTML content
-      const htmlContent = await response.text(); // Use .text() to get HTML response
-  
+      const textContent = await response.text();
+      const paragraphs = textContent.split('\n').filter(paragraph => paragraph.trim() !== '');
+
       setChat((prevChat) => [
         ...prevChat,
-        { type: 'bot', text: htmlContent }, // Directly using HTML content as text
+        { type: 'bot', text: paragraphs.length > 0 ? paragraphs : ['No response received.'] },
       ]);
     } catch (error) {
-      console.error("Error:", error.message); // Log the error message
+      console.error("Error:", error.message);
       setChat((prevChat) => [
         ...prevChat,
-        { type: 'bot', text: 'Sorry, there was an error processing your request.' },
+        { type: 'bot', text: ['Sorry, there was an error processing your request.'] },
       ]);
     } finally {
       setIsLoading(false);
@@ -126,29 +128,32 @@ function SearchComponent() {
       <CssBaseline />
       <ChatContainer maxWidth="md">
         <Typography variant="h5" align="center" gutterBottom style={{ color: theme.palette.text.primary }}>
-          GTSearch 
+          GTSearch
         </Typography>
         <div style={{ overflowY: 'scroll', flexGrow: 1 }}>
           {chat.map((message, index) => (
             <div key={index} ref={chatEndRef}>
+              <MessageLabel type={message.type}>{message.type === 'user' ? 'You' : 'GTSearch'}</MessageLabel>
               {message.type === 'user' ? (
-                <UserBubble elevation={3}>
-                  <StyledAvatar alt="User" src="/user-avatar.png" />
-                  <Typography variant="body2">{message.text}</Typography>
+                <UserBubble>
+                  {message.text.map((p, idx) => (
+                    <MessageText key={idx}>{makeTextClickable(p)}</MessageText>
+                  ))}
                 </UserBubble>
               ) : (
-                <BotBubble elevation={3}>
-                  <StyledAvatar alt="Bot" src="/bot-avatar.png" />
-                  <Typography variant="body2">{message.text}</Typography>
+                <BotBubble>
+                  {message.text.map((p, idx) => (
+                    <MessageText key={idx}>{makeTextClickable(p)}</MessageText>
+                  ))}
                 </BotBubble>
               )}
             </div>
           ))}
           {isLoading && (
-            <BotBubble elevation={3} style={{ display: 'flex', alignItems: 'center' }}>
+            <MessageContainer style={{ display: 'flex', alignItems: 'center' }}>
               <CircularProgress size={20} />
-              <Typography variant="body2" style={{ marginLeft: '10px' }}>Searching...</Typography>
-            </BotBubble>
+              <MessageText style={{ marginLeft: '10px' }}>Searching...</MessageText>
+            </MessageContainer>
           )}
         </div>
         <Grid container spacing={2} alignItems="center" style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: `2px solid ${theme.palette.divider}` }}>
@@ -161,8 +166,8 @@ function SearchComponent() {
               onChange={(e) => setSearchQuery(e.target.value)}
               InputProps={{
                 style: {
-                  backgroundColor: theme.palette.common.white, // For contrast and readability
-                },
+                  backgroundColor: theme.palette.common.white,
+                }
               }}
             />
           </Grid>
@@ -178,6 +183,9 @@ function SearchComponent() {
             </Button>
           </Grid>
         </Grid>
+        <Typography variant="body2" style={{ color: theme.palette.text.secondary, fontSize: '0.75rem', textAlign: 'center', marginTop: '1rem' }}>
+          GTSearch is prone to errors and may present inaccurate information. It's wise to verify its responses for accuracy, especially when dealing with crucial information.
+        </Typography>
       </ChatContainer>
     </ThemeProvider>
   );
